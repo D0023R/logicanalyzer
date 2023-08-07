@@ -4,7 +4,42 @@
 ## Downloads
 You can find all the compiled projects in the [Releases section](https://github.com/gusmanb/logicanalyzer/releases).
 
-Latest version: Release 4.0.0.0, 25/02/2023
+Latest version: Release 5.0.0.0, 20/07/2023
+----
+
+## RELEASE 5.0, Burst mode is here!
+
+New release with exciting feature!
+
+The biggest change on this release is the Burst mode. With burst mode you can capture blocks of data and the analyzer will rearm itself immediatelly and capture more data when the trigger condition is met again. This will improve the memory usage discarding unneeded samples! Right now only the simple trigger mode accepts burst mode but in a future I will try to implement it in all the other triggers.
+For more information check [the wiki.](https://github.com/gusmanb/logicanalyzer/wiki/06---The-LogicAnalyzer-program#triggers)
+
+Also new features to ease the navigation in the capture viewer have been added like shortcuts and a preview of the full capture. More info in [the wiki.](https://github.com/gusmanb/logicanalyzer/wiki/06---The-LogicAnalyzer-program#navigating-on-the-capture-viewer)
+
+Finally multiple improvements have been done, some bugs in the capture tail detection have been corrected, the USB transfer has been improved using directly the CDC transfer functions and more.
+
+Beware that this version is not compatible with other ones, the protocol has changed. The driver will check the device version and will not connect to it if it is lower than V5.0.
+
+Have fun!
+
+----
+
+## UPDATE 28/06/2023 - Release 4.5.1 - QOL improvements
+
+This release include some QOL updates to the applications.
+
+LogicAnalyzer app:
+
+* Ammount of on-screen samples will be preserved if you repeat the last capture.
+* Added a new menu entry called "Repeat las analysis" to the protocol analyzers, it will execute the last analysis performed to speed up things.
+* Changed where config files are stored, they will use the %appData% folder now ($home/.config in Linux).
+* Changed horizontal scrollbar visibility.
+
+CLCapture app:
+
+* Now channel names can be provided from the command line.
+
+Have fun!
 
 ----
 

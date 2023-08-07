@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using AvaloniaEdit.Utils;
@@ -35,6 +36,12 @@ namespace LogicAnalyzer
 
         UInt128[]? copiedSamples;
 
+        MenuItem? mnuRepeatAnalysis;
+
+        AnalysisSettings? analysisSettings;
+
+        bool preserveSamples = false;
+
         public MainWindow()
         {
             Instance = this;
@@ -58,14 +65,113 @@ namespace LogicAnalyzer
 
             tkInScreen.PropertyChanged += tkInScreen_ValueChanged;
             scrSamplePos.Scroll += scrSamplePos_ValueChanged;
+            scrSamplePos.PointerEnter += ScrSamplePos_PointerEnter;
+            scrSamplePos.PointerLeave += ScrSamplePos_PointerLeave;
             mnuNew.Click += MnuNew_Click;
             mnuOpen.Click += mnuOpen_Click;
             mnuSave.Click += mnuSave_Click;
             mnuExit.Click += MnuExit_Click;
             mnuExport.Click += MnuExport_Click;
             mnuNetSettings.Click += MnuNetSettings_Click;
+
+            AddHandler(InputElement.KeyDownEvent, MainWindow_KeyDown, handledEventsToo: true);
+
             LoadAnalyzers();
             RefreshPorts();
+        }
+
+        private void MainWindow_KeyDown(object? sender, Avalonia.Input.KeyEventArgs e)
+        {
+            if (e.KeyModifiers == Avalonia.Input.KeyModifiers.Control)
+            {
+                switch (e.Key)
+                {
+                    case Key.Left:
+                        {
+                            var currentVal = scrSamplePos.Value;
+                            var maxVal = sampleViewer.SamplesInScreen;
+                            int newVal = (int)currentVal - (maxVal / 10);
+
+                            if (newVal < 0)
+                                newVal = 0;
+
+                            scrSamplePos.Value = newVal;
+                            scrSamplePos_ValueChanged(scrSamplePos, null);
+                        }
+                        break;
+                    case Key.Right:
+                        {
+                            var currentVal = scrSamplePos.Value;
+                            var maxVal = sampleViewer.SamplesInScreen;
+                            int newVal = (int)currentVal + (maxVal / 10);
+
+                            if (newVal > scrSamplePos.Maximum)
+                                newVal = (int)scrSamplePos.Maximum;
+
+                            scrSamplePos.Value = newVal;
+                            scrSamplePos_ValueChanged(scrSamplePos, null);
+                        }
+                        break;
+                    case Key.Down:
+                        {
+                            var currentVal = scrSamplePos.Value;
+                            var maxVal = sampleViewer.SamplesInScreen;
+                            int newVal = (int)currentVal - maxVal;
+
+                            if (newVal < 0)
+                                newVal = 0;
+
+                            scrSamplePos.Value = newVal;
+                            scrSamplePos_ValueChanged(scrSamplePos, null);
+                        }
+                        break;
+                    case Key.Up:
+                        {
+                            var currentVal = scrSamplePos.Value;
+                            var maxVal = sampleViewer.SamplesInScreen;
+                            int newVal = (int)currentVal + maxVal;
+
+                            if (newVal > scrSamplePos.Maximum)
+                                newVal = (int)scrSamplePos.Maximum;
+
+                            scrSamplePos.Value = newVal;
+                            scrSamplePos_ValueChanged(scrSamplePos, null);
+                        }
+                        break;
+                }
+            }
+            else if (e.KeyModifiers == KeyModifiers.Shift)
+            {
+                switch (e.Key)
+                {
+                    case Key.Left:
+                        {
+                            var currentVal = scrSamplePos.Value;
+                            int newVal = (int)currentVal - 1;
+
+                            if (newVal < 0)
+                                newVal = 0;
+
+                            scrSamplePos.Value = newVal;
+                            scrSamplePos_ValueChanged(scrSamplePos, null);
+                        }
+                        break;
+                    case Key.Right:
+                        {
+                            var currentVal = scrSamplePos.Value;
+                            int newVal = (int)currentVal + 1;
+
+                            if (newVal > scrSamplePos.Maximum)
+                                newVal = (int)scrSamplePos.Maximum;
+
+                            scrSamplePos.Value = newVal;
+                            scrSamplePos_ValueChanged(scrSamplePos, null);
+                        }
+                        break;
+
+                }
+
+            }
         }
 
         private async void SampleMarker_ShiftSamples(object? sender, EventArgs e)
@@ -75,7 +181,7 @@ namespace LogicAnalyzer
 
             if (await dlg.ShowDialog<bool>(this))
             {
-                    var samples = sampleViewer.Samples;
+                var samples = sampleViewer.Samples;
 
                 foreach (var channel in dlg.ShiftedChannels)
                 {
@@ -114,6 +220,8 @@ namespace LogicAnalyzer
                 sampleViewer.BeginUpdate();
                 sampleViewer.Samples = samples;
                 sampleViewer.EndUpdate();
+                samplePreviewer.UpdateSamples(samples, sampleViewer.ChannelCount);
+                samplePreviewer.ViewPosition = sampleViewer.FirstSample;
             }
         }
 
@@ -188,6 +296,9 @@ namespace LogicAnalyzer
                 sampleViewer.ClearAnalyzedChannels();
 
                 sampleViewer.EndUpdate();
+
+                samplePreviewer.ViewPosition = sampleViewer.FirstSample;
+                samplePreviewer.UpdateSamples(samples, sampleViewer.ChannelCount);
 
                 sampleMarker.VisibleSamples = sampleViewer.SamplesInScreen;
                 sampleMarker.FirstSample = sampleViewer.FirstSample;
@@ -325,14 +436,6 @@ namespace LogicAnalyzer
             var lastSample = e.FirstSample + e.SampleCount - 1;
             var triggerSample = sampleViewer.PreSamples - 1;
 
-            var containsTrigger = e.FirstSample <= triggerSample && lastSample >= triggerSample;
-
-            if (containsTrigger)
-            {
-                await this.ShowError("Error", "Cannot delete the trigger sample.");
-                return;
-            }
-
             var preDelete = sampleViewer.Samples.Take(e.FirstSample);
             var postDelete = sampleViewer.Samples.Skip(e.FirstSample + e.SampleCount + 1);
 
@@ -406,7 +509,8 @@ namespace LogicAnalyzer
         {
             sampleViewer.BeginUpdate();
             sampleViewer.Samples = finalSamples;
-            sampleViewer.PreSamples = finalPreSamples;
+            sampleViewer.PreSamples = 0;
+            sampleViewer.Bursts = null;
 
             if (sampleViewer.FirstSample > finalSamples.Length - 1)
                 sampleViewer.FirstSample = finalSamples.Length - 1;
@@ -418,6 +522,9 @@ namespace LogicAnalyzer
                 sampleViewer.AddRegions(finalRegions);
 
             sampleViewer.EndUpdate();
+
+            samplePreviewer.UpdateSamples(finalSamples, sampleViewer.ChannelCount);
+            samplePreviewer.ViewPosition = sampleViewer.FirstSample;
 
             sampleMarker.VisibleSamples = sampleViewer.SamplesInScreen;
             sampleMarker.FirstSample = sampleViewer.FirstSample;
@@ -558,11 +665,34 @@ namespace LogicAnalyzer
                 sampleViewer.Samples = e.Samples;
                 sampleViewer.PreSamples = e.PreSamples;
                 sampleViewer.ChannelCount = e.ChannelCount;
-                sampleViewer.SamplesInScreen = Math.Min(100, e.Samples.Length / 10);
+
+                if(!preserveSamples)
+                    sampleViewer.SamplesInScreen = Math.Min(100, e.Samples.Length / 10);
+
                 sampleViewer.FirstSample = Math.Max(e.PreSamples - 10, 0);
+
+                if (settings.LoopCount > 0)
+                {
+                    int pos = e.PreSamples;
+                    List<int> bursts = new List<int>();
+
+                    for (int buc = 0; buc < settings.LoopCount; buc++)
+                    {
+                        pos = pos + settings.PostTriggerSamples;
+                        bursts.Add(pos);
+                    }
+
+                    sampleViewer.Bursts = bursts.ToArray();
+                }
+                else
+                    sampleViewer.Bursts = null;
+
                 sampleViewer.ClearRegions();
                 sampleViewer.ClearAnalyzedChannels();
                 sampleViewer.EndUpdate();
+
+                samplePreviewer.UpdateSamples(e.Samples, sampleViewer.ChannelCount);
+                samplePreviewer.ViewPosition = sampleViewer.FirstSample;
 
                 scrSamplePos.Maximum = e.Samples.Length - 1;
                 scrSamplePos.Value = sampleViewer.FirstSample;
@@ -613,11 +743,40 @@ namespace LogicAnalyzer
                     return itm;
                 }).ToArray());
 
+                mnuRepeatAnalysis = new MenuItem { Header = "Repeat last analysis" };
+                mnuRepeatAnalysis.IsEnabled = false;
+                mnuRepeatAnalysis.Click += MnuRepeatAnalysis_Click;
+                finalItems.Add(mnuRepeatAnalysis);
+
                 var clearItem = new MenuItem { Header = "C_lear analysis data" };
                 clearItem.Click += ClearItem_Click;
                 finalItems.Add(clearItem);
 
+                
+
                 mnuProtocols.Items = finalItems;
+            }
+        }
+
+        private void MnuRepeatAnalysis_Click(object? sender, RoutedEventArgs e)
+        {
+
+            if (analysisSettings == null || analysisSettings.Channels == null || analysisSettings.Analyzer == null || analysisSettings.Settings == null)
+                return;
+
+            var channels = analysisSettings.Channels;
+            var samples = sampleViewer.Samples;
+
+            foreach (var channel in channels)
+                ExtractSamples(channel, samples);
+
+            var analysisResult = analysisSettings.Analyzer.Analyze(settings.Frequency, settings.PreTriggerSamples - 1, analysisSettings.Settings, channels);
+
+            if (analysisResult != null)
+            {
+                sampleViewer.BeginUpdate();
+                sampleViewer.AddAnalyzedChannels(analysisResult);
+                sampleViewer.EndUpdate();
             }
         }
 
@@ -662,6 +821,11 @@ namespace LogicAnalyzer
                     sampleViewer.AddAnalyzedChannels(analysisResult);
                     sampleViewer.EndUpdate();
                 }
+
+                analysisSettings = new AnalysisSettings { Analyzer = analyzer, Channels = channels, Settings = dlg.SelectedSettings };
+
+                if(mnuRepeatAnalysis != null)
+                    mnuRepeatAnalysis.IsEnabled = true;
             }
         }
 
@@ -762,7 +926,7 @@ namespace LogicAnalyzer
                 await this.ShowError("Error", "No capture to repeat");
                 return;
             }
-
+            preserveSamples = true;
             BeginCapture();
         }
 
@@ -775,6 +939,7 @@ namespace LogicAnalyzer
                 return;
 
             settings = dialog.SelectedSettings;
+            preserveSamples = false;
             BeginCapture();
 
         }
@@ -800,7 +965,7 @@ namespace LogicAnalyzer
             }
             else
             {
-                var error = driver.StartCapture(settings.Frequency, settings.PreTriggerSamples, settings.PostTriggerSamples, settings.CaptureChannels.Select(c => c.ChannelNumber).ToArray(), settings.TriggerChannel, settings.TriggerInverted);
+                var error = driver.StartCapture(settings.Frequency, settings.PreTriggerSamples, settings.PostTriggerSamples, settings.LoopCount, settings.CaptureChannels.Select(c => c.ChannelNumber).ToArray(), settings.TriggerChannel, settings.TriggerInverted);
 
                 if (error != CaptureError.None)
                 {
@@ -834,7 +999,15 @@ namespace LogicAnalyzer
                     return;
             }
         }
+        private void ScrSamplePos_PointerLeave(object? sender, Avalonia.Input.PointerEventArgs e)
+        {
+            samplePreviewer.IsVisible = false;
+        }
 
+        private void ScrSamplePos_PointerEnter(object? sender, Avalonia.Input.PointerEventArgs e)
+        {
+            samplePreviewer.IsVisible = true;
+        }
         private void scrSamplePos_ValueChanged(object? sender, ScrollEventArgs e)
         {
             if (sampleViewer.Samples != null)
@@ -842,6 +1015,7 @@ namespace LogicAnalyzer
                 sampleViewer.BeginUpdate();
                 sampleViewer.FirstSample = (int)scrSamplePos.Value;
                 sampleViewer.EndUpdate();
+                samplePreviewer.ViewPosition = sampleViewer.FirstSample;
                 sampleMarker.FirstSample = sampleViewer.FirstSample;
             }
         }
@@ -883,7 +1057,11 @@ namespace LogicAnalyzer
                     if (string.IsNullOrWhiteSpace(file))
                         return;
 
-                    ExportedCapture ex = new ExportedCapture { Settings = settings, Samples = sampleViewer.Samples, SelectedRegions = sampleViewer.SelectedRegions };
+                    var sets = settings.Clone();
+                    sets.PreTriggerSamples = sampleViewer.PreSamples;
+                    sets.LoopCount = sampleViewer.Bursts?.Length ?? 0;
+
+                    ExportedCapture ex = new ExportedCapture { Settings = sets, Samples = sampleViewer.Samples, SelectedRegions = sampleViewer.SelectedRegions };
 
                     File.WriteAllText(file, JsonConvert.SerializeObject(ex, new JsonConverter[] { new SampleRegion.SampleRegionConverter() }));
                 }
@@ -936,6 +1114,7 @@ namespace LogicAnalyzer
                                 Frequency = oldset.Frequency,
                                 PostTriggerSamples = oldset.PostTriggerSamples,
                                 PreTriggerSamples = oldset.PreTriggerSamples,
+                                LoopCount = 0,
                                 TriggerBitCount = oldset.TriggerBitCount,
                                 TriggerChannel = oldset.TriggerChannel,
                                 TriggerInverted = oldset.TriggerInverted,
@@ -970,6 +1149,9 @@ namespace LogicAnalyzer
                         sampleViewer.AddRegions(ex.SelectedRegions);
 
                     sampleViewer.EndUpdate();
+
+                    samplePreviewer.UpdateSamples(ex.Samples, sampleViewer.ChannelCount);
+                    samplePreviewer.ViewPosition = sampleViewer.FirstSample;
 
                     sampleMarker.VisibleSamples = sampleViewer.SamplesInScreen;
                     sampleMarker.FirstSample = sampleViewer.FirstSample;
